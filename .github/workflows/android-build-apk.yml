@@ -1,0 +1,132 @@
+name: Build Signed Release APK
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    name: Build & Sign Release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          add-job-summary: 'on-failure'
+          add-job-summary-as-pr-comment: 'never'
+
+      - name: Prepare Local Environment and Permissions
+        run: |
+          # Asegurar existencia y permisos del Gradle Wrapper
+          if [ ! -f "gradlew" ]; then
+            echo "gradlew no encontrado. Generando wrapper con gradle..."
+            gradle wrapper
+          fi
+          chmod +x gradlew || true
+
+          # Archivos de entorno requeridos por el plugin Secrets Gradle
+          touch .env
+          touch .env.example
+
+      - name: Configure Keystore and Dynamic Alias Detection
+        run: |
+          KEYSTORE_FILE="my-upload-key.jks"
+          KEY_PASS="android"
+          STORE_PASS="android"
+
+          # Si no existe keystore en el repositorio, generarlo automáticamente
+          if [ ! -f "$KEYSTORE_FILE" ]; then
+            echo "Keystore no encontrado. Generando keystore de firma release..."
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_FILE" \
+              -alias "upload" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "$STORE_PASS" \
+              -keypass "$KEY_PASS" \
+              -dname "CN=DownloadChunk, OU=Mobile, O=DownloadChunk, L=City, ST=State, C=US"
+          fi
+
+          # Detección dinámica de alias mediante keytool
+          DETECTED_ALIAS=$(keytool -list -v -keystore "$KEYSTORE_FILE" -storepass "$STORE_PASS" 2>/dev/null | grep -i "Alias name:" | head -n 1 | awk -F': ' '{print $2}' | xargs)
+          if [ -z "$DETECTED_ALIAS" ]; then
+            DETECTED_ALIAS="upload"
+          fi
+          echo "Alias detectado para firma: $DETECTED_ALIAS"
+
+          # Exportar variables de entorno para Gradle
+          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/$KEYSTORE_FILE" >> $GITHUB_ENV
+          echo "KEY_ALIAS=$DETECTED_ALIAS" >> $GITHUB_ENV
+          echo "STORE_PASSWORD=$STORE_PASS" >> $GITHUB_ENV
+          echo "KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+
+          # Copia de seguridad en la raíz y en el subdirectorio app/
+          cp -f "$KEYSTORE_FILE" "app/$KEYSTORE_FILE" || true
+
+      - name: Build Release APK
+        run: |
+          ./gradlew :app:assembleRelease \
+            --no-daemon \
+            -Dkotlin.compiler.execution.strategy=daemon \
+            -Dksp.incremental=false \
+            -Dksp.incremental.intermodule=false \
+            --stacktrace
+
+      - name: Verify Generated APK
+        id: verify-apk
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          if [ -z "$APK_PATH" ] || [ ! -f "$APK_PATH" ]; then
+            echo "ERROR: No se encontró ningún archivo APK en app/build/outputs/apk/release/"
+            exit 1
+          fi
+          echo "APK generado exitosamente en: $APK_PATH"
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          ls -lh "$APK_PATH"
+
+      - name: Upload Release APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish Direct APK to GitHub Releases
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: "Download Chunk - APK Instalable"
+          body: |
+            ### 📱 Download Chunk (Última Versión)
+            Descarga directa para instalar o actualizar la app en tu teléfono Android:
+            - **Descarga directa:** Haz clic en `app-release.apk` abajo para descargar e instalar directamente.
+            - **Firma persistente:** Conserva la misma firma (`my-upload-key.jks`) para actualizar sobre versiones previas sin desinstalar.
+          files: app/build/outputs/apk/release/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

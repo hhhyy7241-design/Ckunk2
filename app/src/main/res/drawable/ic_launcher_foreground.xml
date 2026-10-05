@@ -1,0 +1,163 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Subtle Ambient Glow under the icon structure -->
+    <path
+        android:pathData="M54,54m-28,0a28,28 0,1,1 56,0a28,28 0,1,1 -56,0">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:centerX="54"
+                android:centerY="54"
+                android:gradientRadius="34"
+                android:type="radial">
+                <item android:color="#1A00C2FF" android:offset="0.0" />
+                <item android:color="#00FFFFFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- TALLO: 3 bloques redondeados apilados en vertical -->
+    <!-- Bloque 1 (Superior - Inicio de descarga, azul eléctrico claro) -->
+    <path
+        android:pathData="M51.5,26.5 L56.5,26.5 A3.5,3.5 0,0,1 60,30 L60,30.5 A3.5,3.5 0,0,1 56.5,34 L51.5,34 A3.5,3.5 0,0,1 48,30.5 L48,30 A3.5,3.5 0,0,1 51.5,26.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="48"
+                android:startY="26.5"
+                android:endX="60"
+                android:endY="34"
+                android:type="linear">
+                <item android:color="#788CFF" android:offset="0.0" />
+                <item android:color="#5B72FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bloque 2 (Medio - Progreso, azul eléctrico intenso #3A55FF) -->
+    <path
+        android:pathData="M51.5,36.5 L56.5,36.5 A3.5,3.5 0,0,1 60,40 L60,40.5 A3.5,3.5 0,0,1 56.5,44 L51.5,44 A3.5,3.5 0,0,1 48,40.5 L48,40 A3.5,3.5 0,0,1 51.5,36.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="48"
+                android:startY="36.5"
+                android:endX="60"
+                android:endY="44"
+                android:type="linear">
+                <item android:color="#4A65FF" android:offset="0.0" />
+                <item android:color="#3A55FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Bloque 3 (Inferior - Máxima intensidad hacia cian) -->
+    <path
+        android:pathData="M51.5,46.5 L56.5,46.5 A3.5,3.5 0,0,1 60,50 L60,50.5 A3.5,3.5 0,0,1 56.5,54 L51.5,54 A3.5,3.5 0,0,1 48,50.5 L48,50 A3.5,3.5 0,0,1 51.5,46.5 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="48"
+                android:startY="46.5"
+                android:endX="60"
+                android:endY="54"
+                android:type="linear">
+                <item android:color="#3A55FF" android:offset="0.0" />
+                <item android:color="#198FFF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Sutil brillo interno en los bloques para dar profundidad -->
+    <path
+        android:pathData="M51.5,27.5 L56.5,27.5 M51.5,37.5 L56.5,37.5 M51.5,47.5 L56.5,47.5"
+        android:strokeColor="#50FFFFFF"
+        android:strokeWidth="1.2"
+        android:strokeLineCap="round" />
+
+    <!-- PUNTA: Chevron grueso en forma de V, suave y redondeado, justo debajo del tallo -->
+    <path
+        android:pathData="M37,58.5 L54,72 L71,58.5"
+        android:strokeWidth="8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:strokeColor">
+            <gradient
+                android:startX="37"
+                android:startY="58.5"
+                android:endX="71"
+                android:endY="72"
+                android:type="linear">
+                <item android:color="#3A55FF" android:offset="0.0" />
+                <item android:color="#00A2FF" android:offset="0.5" />
+                <item android:color="#00C2FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Brillo sutil dentro de la punta en V para profundidad -->
+    <path
+        android:pathData="M38.5,58 L54,70.5 L69.5,58"
+        android:strokeColor="#38FFFFFF"
+        android:strokeWidth="2"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+
+    <!-- BASE: 3 segmentos horizontales redondeados con separación pequeña -->
+    <!-- Segmento 1 (Izquierda - Descargado completo, azul eléctrico) -->
+    <path
+        android:pathData="M35,80 L42,80 A2.5,2.5 0,0,1 44.5,82.5 L44.5,83 A2.5,2.5 0,0,1 42,85.5 L35,85.5 A2.5,2.5 0,0,1 32.5,83 L32.5,82.5 A2.5,2.5 0,0,1 35,80 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="32.5"
+                android:startY="80"
+                android:endX="44.5"
+                android:endY="85.5"
+                android:type="linear">
+                <item android:color="#3A55FF" android:offset="0.0" />
+                <item android:color="#2478FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Segmento 2 (Centro - Descargado completo, cian vibrante) -->
+    <path
+        android:pathData="M50.5,80 L57.5,80 A2.5,2.5 0,0,1 60,82.5 L60,83 A2.5,2.5 0,0,1 57.5,85.5 L50.5,85.5 A2.5,2.5 0,0,1 48,83 L48,82.5 A2.5,2.5 0,0,1 50.5,80 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="48"
+                android:startY="80"
+                android:endX="60"
+                android:endY="85.5"
+                android:type="linear">
+                <item android:color="#1A93FF" android:offset="0.0" />
+                <item android:color="#00C2FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Segmento 3 (Derecha - Parte tenue, descarga en progreso) -->
+    <path
+        android:pathData="M66,80 L73,80 A2.5,2.5 0,0,1 75.5,82.5 L75.5,83 A2.5,2.5 0,0,1 73,85.5 L66,85.5 A2.5,2.5 0,0,1 63.5,83 L63.5,82.5 A2.5,2.5 0,0,1 66,80 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:startX="63.5"
+                android:startY="80"
+                android:endX="75.5"
+                android:endY="85.5"
+                android:type="linear">
+                <item android:color="#4000C2FF" android:offset="0.0" />
+                <item android:color="#303A55FF" android:offset="1.0" />
+            </gradient>
+        </aapt:attr>
+    </path>
+
+    <!-- Brillo superior en los dos primeros segmentos de la base -->
+    <path
+        android:pathData="M35,81 L42,81 M50.5,81 L57.5,81"
+        android:strokeColor="#50FFFFFF"
+        android:strokeWidth="1"
+        android:strokeLineCap="round" />
+
+</vector>

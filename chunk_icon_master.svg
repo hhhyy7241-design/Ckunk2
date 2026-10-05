@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Background subtle gradient if needed, but solid pure white base -->
+    <radialGradient id="bgGlow" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" />
+      <stop offset="85%" stop-color="#F8FAFC" />
+      <stop offset="100%" stop-color="#F1F5F9" />
+    </radialGradient>
+
+    <!-- Linear Gradients for 3D Isometric Chunks -->
+    <linearGradient id="cubeTop" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+
+    <linearGradient id="cubeLeft" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0369A1" />
+      <stop offset="100%" stop-color="#0C4A6E" />
+    </linearGradient>
+
+    <linearGradient id="cubeRight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0284C7" />
+      <stop offset="100%" stop-color="#075985" />
+    </linearGradient>
+
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="50%" stop-color="#0284C7" />
+      <stop offset="100%" stop-color="#0369A1" />
+    </linearGradient>
+
+    <linearGradient id="floatingChunk" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#67E8F9" />
+      <stop offset="100%" stop-color="#0EA5E9" />
+    </linearGradient>
+
+    <!-- Soft Drop Shadow -->
+    <filter id="dropShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="16" flood-color="#0F172A" flood-opacity="0.18" />
+    </filter>
+
+    <filter id="floatShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="6" dy="12" stdDeviation="10" flood-color="#0284C7" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Solid Crisp White Background -->
+  <rect width="512" height="512" fill="url(#bgGlow)" rx="100" />
+
+  <!-- Shadow Base for Main Platform -->
+  <ellipse cx="256" cy="405" rx="140" ry="32" fill="#0F172A" opacity="0.12" filter="blur(8px)" />
+
+  <g filter="url(#dropShadow)">
+    <!-- Base Tray / Assembly Floor (Isometric Hexagon) -->
+    <!-- Center top vertex: (256, 170) -->
+    <!-- Top-Right: (366, 234) -->
+    <!-- Bottom-Right: (366, 320) -->
+    <!-- Bottom: (256, 384) -->
+    <!-- Bottom-Left: (146, 320) -->
+    <!-- Top-Left: (146, 234) -->
+
+    <!-- Left Main Face of Modular Cube -->
+    <polygon points="146,234 256,298 256,384 146,320" fill="url(#cubeLeft)" />
+
+    <!-- Right Main Face of Modular Cube -->
+    <polygon points="256,298 366,234 366,320 256,384" fill="url(#cubeRight)" />
+
+    <!-- Top Main Face of Modular Cube (Cutout in center for Arrow) -->
+    <polygon points="256,170 366,234 256,298 146,234" fill="url(#cubeTop)" />
+
+    <!-- Chunk Grid Lines (Subdivided blocks) -->
+    <!-- Left Face dividing lines -->
+    <line x1="201" y1="266" x2="201" y2="352" stroke="#0284C7" stroke-width="3" opacity="0.4" />
+    <line x1="146" y1="277" x2="256" y2="341" stroke="#0284C7" stroke-width="3" opacity="0.4" />
+
+    <!-- Right Face dividing lines -->
+    <line x1="311" y1="266" x2="311" y2="352" stroke="#38BDF8" stroke-width="3" opacity="0.4" />
+    <line x1="256" y1="341" x2="366" y2="277" stroke="#38BDF8" stroke-width="3" opacity="0.4" />
+
+    <!-- Top Face dividing lines -->
+    <line x1="201" y1="202" x2="311" y2="266" stroke="#FFFFFF" stroke-width="3" opacity="0.5" />
+    <line x1="311" y1="202" x2="201" y2="266" stroke="#FFFFFF" stroke-width="3" opacity="0.5" />
+
+    <!-- High-tech Sleek Download Arrow plunging through center -->
+    <g>
+      <!-- Arrow shaft -->
+      <path d="M236,120 L276,120 L276,240 L316,240 L256,306 L196,240 L236,240 Z"
+            fill="#FFFFFF" />
+      <path d="M240,124 L272,124 L272,244 L308,244 L256,300 L204,244 L240,244 Z"
+            fill="url(#arrowGrad)" />
+    </g>
+  </g>
+
+  <!-- Floating Modular Chunk Block in Motion (Upper Right) -->
+  <g filter="url(#floatShadow)">
+    <!-- Floating Cube: Center (375, 140) -->
+    <!-- Top face of floating chunk -->
+    <polygon points="375,110 415,130 375,150 335,130" fill="url(#floatingChunk)" />
+    <!-- Left face of floating chunk -->
+    <polygon points="335,130 375,150 375,185 335,165" fill="#0284C7" />
+    <!-- Right face of floating chunk -->
+    <polygon points="375,150 415,130 415,165 375,185" fill="#0369A1" />
+  </g>
+
+  <!-- Subtle Speed Trail Dots for Floating Chunk -->
+  <circle cx="395" cy="85" r="4" fill="#38BDF8" opacity="0.8" />
+  <circle cx="415" cy="95" r="5" fill="#0EA5E9" opacity="0.7" />
+  <circle cx="345" cy="100" r="3.5" fill="#38BDF8" opacity="0.6" />
+</svg>

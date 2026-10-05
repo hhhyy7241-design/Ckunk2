@@ -1,0 +1,6 @@
+{
+  "name": "Download Chunk",
+  "description": "Download Chunk - Gestor nativo de descarga y reconstrucción de archivos fragmentados",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
