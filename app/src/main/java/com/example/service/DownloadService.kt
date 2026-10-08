@@ -38,6 +38,7 @@ import com.example.model.DownloadState
 import com.example.parser.MoodleCodeParser
 import com.example.util.FileUtils
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -125,7 +126,10 @@ class DownloadService : Service() {
         }
     }
 
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val coroutineExceptionHandler = CoroutineExceptionHandler { _, throwable ->
+        Log.e(TAG, "Unhandled coroutine error in DownloadService: ${throwable.message}", throwable)
+    }
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO + coroutineExceptionHandler)
     private lateinit var notificationManager: NotificationManager
     private lateinit var database: AppDatabase
     private lateinit var settingsManager: SettingsManager
@@ -177,41 +181,45 @@ class DownloadService : Service() {
         ensureForegroundStarted()
 
         serviceScope.launch {
-            when (action) {
-                ACTION_START -> {
-                    if (downloadId != null) handleStartOrEnqueue(downloadId)
+            try {
+                when (action) {
+                    ACTION_START -> {
+                        if (downloadId != null) handleStartOrEnqueue(downloadId)
+                    }
+                    ACTION_PAUSE -> {
+                        if (downloadId != null) handlePauseCommand(downloadId)
+                    }
+                    ACTION_RESUME -> {
+                        if (downloadId != null) handleResumeCommand(downloadId)
+                    }
+                    ACTION_CANCEL -> {
+                        if (downloadId != null) handleCancelCommand(downloadId)
+                    }
+                    ACTION_RETRY -> {
+                        if (downloadId != null) handleRetryCommand(downloadId)
+                    }
+                    ACTION_PAUSE_ALL -> {
+                        handlePauseAllCommand()
+                    }
+                    ACTION_RESUME_ALL -> {
+                        handleResumeAllCommand()
+                    }
+                    ACTION_CANCEL_ALL -> {
+                        handleCancelAllCommand()
+                    }
+                    ACTION_MOVE_TO_TOP -> {
+                        if (downloadId != null) handleMoveToTopCommand(downloadId)
+                    }
+                    ACTION_FORCE_START -> {
+                        if (downloadId != null) handleForceStartCommand(downloadId)
+                    }
+                    else -> {
+                        // Restauración tras reinicio del servicio o del sistema
+                        restoreActiveDownloads()
+                    }
                 }
-                ACTION_PAUSE -> {
-                    if (downloadId != null) handlePauseCommand(downloadId)
-                }
-                ACTION_RESUME -> {
-                    if (downloadId != null) handleResumeCommand(downloadId)
-                }
-                ACTION_CANCEL -> {
-                    if (downloadId != null) handleCancelCommand(downloadId)
-                }
-                ACTION_RETRY -> {
-                    if (downloadId != null) handleRetryCommand(downloadId)
-                }
-                ACTION_PAUSE_ALL -> {
-                    handlePauseAllCommand()
-                }
-                ACTION_RESUME_ALL -> {
-                    handleResumeAllCommand()
-                }
-                ACTION_CANCEL_ALL -> {
-                    handleCancelAllCommand()
-                }
-                ACTION_MOVE_TO_TOP -> {
-                    if (downloadId != null) handleMoveToTopCommand(downloadId)
-                }
-                ACTION_FORCE_START -> {
-                    if (downloadId != null) handleForceStartCommand(downloadId)
-                }
-                else -> {
-                    // Restauración tras reinicio del servicio o del sistema
-                    restoreActiveDownloads()
-                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "Error executing service action $action: ${t.message}", t)
             }
         }
 
@@ -247,22 +255,27 @@ class DownloadService : Service() {
                 return
             }
 
-            Log.d(TAG, "Pausing download: $downloadId")
-            // 1. Estado "Pausando"
+            Log.d(TAG, "Pausing download safely: $downloadId")
+            // 1. Marcar estado transicional
             database.downloadDao().updateStatus(downloadId, DownloadState.PAUSING.name, null, pausedByNetwork = false)
 
             // 2. Señalizar que termine la escritura en curso y cancelar la llamada HTTP
             pausingFlags[downloadId]?.set(true)
-            activeCalls[downloadId]?.forEach { try { it.cancel() } catch (_: Exception) {} }
+            activeCalls[downloadId]?.forEach {
+                try { it.cancel() } catch (_: Throwable) {}
+            }
 
             // 3. Esperar que el trabajo activo termine ordenadamente de guardar en disco
-            val job = activeJobs[downloadId]
-            job?.cancelAndJoin()
-            activeJobs.remove(downloadId)
+            val job = activeJobs.remove(downloadId)
+            try {
+                job?.cancelAndJoin()
+            } catch (_: Throwable) {
+                Log.d(TAG, "Job cancellation completed for $downloadId")
+            }
 
             // 4. Pasar a "Pausada" guardando los bytes descargados
             database.downloadDao().updateStatus(downloadId, DownloadState.PAUSED.name, null, pausedByNetwork = false)
-            Log.d(TAG, "Transitioned to PAUSED: $downloadId")
+            Log.d(TAG, "Transitioned safely to PAUSED: $downloadId")
 
             releaseLocksIfIdle()
             throttledUpdateNotifications()
@@ -452,10 +465,14 @@ class DownloadService : Service() {
                 Log.d(TAG, "Starting download pipeline for $downloadId (${entity.fileName})")
                 executeDownloadPipeline(entity)
             } catch (e: CancellationException) {
-                Log.d(TAG, "Download pipeline cancelled for $downloadId")
+                Log.d(TAG, "Download pipeline cancelled/paused for $downloadId")
             } catch (e: Exception) {
-                Log.e(TAG, "Error in download pipeline for $downloadId: ${e.message}", e)
-                handleDownloadError(downloadId, e)
+                if (pausingFlags[downloadId]?.get() == true) {
+                    Log.d(TAG, "Download paused intentionally for $downloadId, suppressing error: ${e.message}")
+                } else {
+                    Log.e(TAG, "Error in download pipeline for $downloadId: ${e.message}", e)
+                    handleDownloadError(downloadId, e)
+                }
             } finally {
                 activeJobs.remove(downloadId)
                 activeCalls.remove(downloadId)
@@ -675,153 +692,179 @@ class DownloadService : Service() {
         partFile: File,
         onProgress: (Long) -> Unit
     ) {
-        val existingBytes = if (tempFile.exists()) tempFile.length() else 0L
+        var allowResume = true
+        var attemptCount = 0
 
-        val requestBuilder = Request.Builder().url(partUrl)
-        if (existingBytes > 0L) {
-            requestBuilder.header("Range", "bytes=$existingBytes-")
-        }
+        while (true) {
+            attemptCount++
+            val existingBytes = if (allowResume && tempFile.exists()) tempFile.length() else 0L
+            if (!allowResume && tempFile.exists()) {
+                tempFile.delete()
+            }
 
-        val request = requestBuilder.build()
-        val call = client.newCall(request)
-        activeCalls.computeIfAbsent(downloadId) { ConcurrentHashMap.newKeySet() }.add(call)
+            val requestBuilder = Request.Builder().url(partUrl)
+            if (existingBytes > 0L) {
+                requestBuilder.header("Range", "bytes=$existingBytes-")
+            }
 
-        val response: Response
-        try {
-            response = call.execute()
-        } catch (e: IOException) {
-            activeCalls[downloadId]?.remove(call)
-            if (pausingFlags[downloadId]?.get() == true) return
-            throw e
-        }
+            val request = requestBuilder.build()
+            val call = client.newCall(request)
+            activeCalls.computeIfAbsent(downloadId) { ConcurrentHashMap.newKeySet() }.add(call)
 
-        if (response.code == 416) {
-            // 416 solo puede significar que el servidor considera que el rango ya terminó.
-            // Nunca debemos convertirlo en .part sin comprobar el tamaño exacto del recurso.
-            val contentRange = response.header("Content-Range")
-            response.close()
-            activeCalls[downloadId]?.remove(call)
+            val response: Response
+            try {
+                response = call.execute()
+            } catch (e: IOException) {
+                activeCalls[downloadId]?.remove(call)
+                if (pausingFlags[downloadId]?.get() == true) return
+                throw e
+            }
 
-            val totalSize = parseUnsatisfiedRangeTotal(contentRange)
-            if (totalSize != null && tempFile.exists() && tempFile.length() == totalSize) {
-                if (partFile.exists()) partFile.delete()
-                if (!tempFile.renameTo(partFile)) {
-                    throw IOException("No se pudo finalizar el fragmento descargado.")
+            // Manejo de servidores o enlaces que no admiten reanudación (HTTP 416, 400, 405, 501 con Range)
+            if (existingBytes > 0L && (response.code == 416 || response.code == 400 || response.code == 405 || response.code == 501)) {
+                val contentRange = response.header("Content-Range")
+                val totalSize = parseUnsatisfiedRangeTotal(contentRange)
+                if (response.code == 416 && totalSize != null && tempFile.exists() && tempFile.length() == totalSize) {
+                    response.close()
+                    activeCalls[downloadId]?.remove(call)
+                    if (partFile.exists()) partFile.delete()
+                    if (!tempFile.renameTo(partFile)) {
+                        throw IOException("No se pudo finalizar el fragmento descargado.")
+                    }
+                    onProgress(partFile.length())
+                    return
                 }
-                onProgress(partFile.length())
-                return
+
+                Log.w(TAG, "Enlace no admite reanudación (HTTP ${response.code}). Reiniciando descarga de este fragmento desde 0...")
+                response.close()
+                activeCalls[downloadId]?.remove(call)
+                allowResume = false
+                tempFile.delete()
+                onProgress(0L)
+                if (attemptCount <= 2) continue else throw IOException("El servidor rechazó la descarga del fragmento.")
             }
 
-            throw IOException("El servidor rechazó el rango de reanudación (HTTP 416) y no se pudo verificar el tamaño del fragmento.")
-        }
-
-        if (!response.isSuccessful) {
-            activeCalls[downloadId]?.remove(call)
-            response.close()
-            if (response.code == 401 || response.code == 403 || response.code == 404) {
-                throw PermanentDownloadException("El servidor rechazó la parte (HTTP ${response.code}).")
-            }
-            throw IOException("Error HTTP ${response.code} descargando fragmento.")
-        }
-
-        val isAppend = response.code == 206 && existingBytes > 0L
-        if (isAppend) {
-            val contentRange = response.header("Content-Range")
-            val rangeStart = parseContentRangeStart(contentRange)
-            if (rangeStart != existingBytes) {
+            if (!response.isSuccessful) {
                 activeCalls[downloadId]?.remove(call)
                 response.close()
-                throw IOException(
-                    "El servidor devolvió un rango incorrecto para reanudar el fragmento: " +
-                        "se esperaba $existingBytes y se recibió ${rangeStart ?: "desconocido"}."
-                )
+                if (existingBytes > 0L && attemptCount <= 2) {
+                    Log.w(TAG, "Fallo HTTP ${response.code} con Range. Intentando descarga limpia sin Range desde 0...")
+                    allowResume = false
+                    tempFile.delete()
+                    onProgress(0L)
+                    continue
+                }
+                if (response.code == 401 || response.code == 403 || response.code == 404) {
+                    throw PermanentDownloadException("El servidor rechazó el enlace (HTTP ${response.code}).")
+                }
+                throw IOException("Error HTTP ${response.code} descargando fragmento.")
             }
-        }
 
-        val expectedResponseBytes = response.body?.contentLength()?.takeIf { it >= 0L }
-        val body = response.body ?: run {
-            activeCalls[downloadId]?.remove(call)
-            response.close()
-            throw IOException("Cuerpo de respuesta vacío.")
-        }
+            val isAppend = response.code == 206 && existingBytes > 0L
+            if (isAppend) {
+                val contentRange = response.header("Content-Range")
+                val rangeStart = parseContentRangeStart(contentRange)
+                if (rangeStart != null && rangeStart != existingBytes) {
+                    activeCalls[downloadId]?.remove(call)
+                    response.close()
+                    Log.w(TAG, "Rango devuelto ($rangeStart) distinto de esperado ($existingBytes). Reiniciando desde 0...")
+                    allowResume = false
+                    tempFile.delete()
+                    onProgress(0L)
+                    if (attemptCount <= 2) continue else throw IOException("Rango no compatible.")
+                }
+            } else if (existingBytes > 0L && response.code == 200) {
+                // El servidor ignoró Range y envió el fragmento completo (HTTP 200)
+                Log.i(TAG, "Servidor no soporta Range (HTTP 200). Reiniciando fragmento desde 0...")
+                tempFile.delete()
+            }
 
-        var totalWritten = if (isAppend) existingBytes else 0L
-        var responseBytesWritten = 0L
+            val expectedResponseBytes = response.body?.contentLength()?.takeIf { it >= 0L }
+            val body = response.body ?: run {
+                activeCalls[downloadId]?.remove(call)
+                response.close()
+                throw IOException("Cuerpo de respuesta vacío.")
+            }
 
-        var throttleStartTime = System.currentTimeMillis()
-        var bytesWrittenInWindow = 0L
+            var totalWritten = if (isAppend) existingBytes else 0L
+            var responseBytesWritten = 0L
 
-        try {
-            body.byteStream().use { input ->
-                // Si el servidor ignoró Range y respondió 200, se reinicia el fragmento
-                // desde cero en lugar de concatenar datos duplicados.
-                FileOutputStream(tempFile, isAppend).use { output ->
-                    val buffer = ByteArray(BUFFER_SIZE)
-                    var read: Int
+            var throttleStartTime = System.currentTimeMillis()
+            var bytesWrittenInWindow = 0L
 
-                    while (input.read(buffer).also { read = it } != -1) {
-                        if (pausingFlags[downloadId]?.get() == true) {
+            try {
+                body.byteStream().use { input ->
+                    FileOutputStream(tempFile, isAppend).use { output ->
+                        val buffer = ByteArray(BUFFER_SIZE)
+                        var read: Int
+
+                        while (input.read(buffer).also { read = it } != -1) {
+                            if (pausingFlags[downloadId]?.get() == true) {
+                                output.write(buffer, 0, read)
+                                totalWritten += read
+                                responseBytesWritten += read
+                                output.flush()
+                                onProgress(totalWritten)
+                                Log.d(TAG, "Flushed and paused chunk cleanly: totalWritten=$totalWritten")
+                                break
+                            }
+
                             output.write(buffer, 0, read)
                             totalWritten += read
                             responseBytesWritten += read
-                            output.flush()
+                            bytesWrittenInWindow += read
                             onProgress(totalWritten)
-                            Log.d(TAG, "Flushed and paused chunk cleanly: totalWritten=$totalWritten")
-                            break
-                        }
 
-                        output.write(buffer, 0, read)
-                        totalWritten += read
-                        responseBytesWritten += read
-                        bytesWrittenInWindow += read
-                        onProgress(totalWritten)
-
-                        val currentSpeedLimitBps = settingsManager.settings.value.speedLimit.bytesPerSec
-                        if (currentSpeedLimitBps > 0) {
-                            val elapsedMs = (System.currentTimeMillis() - throttleStartTime).coerceAtLeast(1L)
-                            val expectedMs = (bytesWrittenInWindow * 1000L) / currentSpeedLimitBps
-                            if (expectedMs > elapsedMs) {
-                                val sleepMs = (expectedMs - elapsedMs).coerceIn(1L, 400L)
-                                SystemClock.sleep(sleepMs)
-                            }
-                            if (elapsedMs >= 1000L) {
+                            val currentSpeedLimitBps = settingsManager.settings.value.speedLimit.bytesPerSec
+                            if (currentSpeedLimitBps > 0) {
+                                val elapsedMs = (System.currentTimeMillis() - throttleStartTime).coerceAtLeast(1L)
+                                val expectedMs = (bytesWrittenInWindow * 1000L) / currentSpeedLimitBps
+                                if (expectedMs > elapsedMs) {
+                                    val sleepMs = (expectedMs - elapsedMs).coerceIn(1L, 400L)
+                                    SystemClock.sleep(sleepMs)
+                                }
+                                if (elapsedMs >= 1000L) {
+                                    throttleStartTime = System.currentTimeMillis()
+                                    bytesWrittenInWindow = 0L
+                                }
+                            } else {
                                 throttleStartTime = System.currentTimeMillis()
                                 bytesWrittenInWindow = 0L
                             }
-                        } else {
-                            throttleStartTime = System.currentTimeMillis()
-                            bytesWrittenInWindow = 0L
                         }
+                        output.flush()
                     }
-                    output.flush()
                 }
+            } catch (e: Exception) {
+                if (pausingFlags[downloadId]?.get() == true || e is CancellationException) {
+                    Log.d(TAG, "Lectura de stream interrumpida de forma limpia por pausa: $downloadId")
+                    return
+                }
+                throw e
+            } finally {
+                response.close()
+                activeCalls[downloadId]?.remove(call)
             }
-        } finally {
-            response.close()
-            activeCalls[downloadId]?.remove(call)
-        }
 
-        // Si el cuerpo terminó antes de lo anunciado, conservar .tmp para que el siguiente
-        // intento pueda reanudar exactamente desde el byte recibido. Nunca marcarlo como .part.
-        // Una pausa voluntaria no es una respuesta incompleta: el .tmp queda preparado
-        // para continuar mediante Range en el siguiente intento.
-        if (pausingFlags[downloadId]?.get() == true) return
+            if (pausingFlags[downloadId]?.get() == true) return
 
-        if (expectedResponseBytes != null && responseBytesWritten != expectedResponseBytes) {
-            throw IOException(
-                "La respuesta del fragmento quedó incompleta: $responseBytesWritten bytes recibidos de $expectedResponseBytes."
-            )
-        }
+            if (expectedResponseBytes != null && responseBytesWritten != expectedResponseBytes) {
+                throw IOException(
+                    "La respuesta del fragmento quedó incompleta: $responseBytesWritten bytes recibidos de $expectedResponseBytes."
+                )
+            }
 
-        if (!tempFile.exists() || tempFile.length() <= 0L) {
-            throw IOException("El fragmento terminó sin datos.")
-        }
+            if (!tempFile.exists() || tempFile.length() <= 0L) {
+                throw IOException("El fragmento terminó sin datos.")
+            }
 
-        if (partFile.exists()) partFile.delete()
-        if (!tempFile.renameTo(partFile)) {
-            throw IOException("No se pudo finalizar el fragmento descargado.")
+            if (partFile.exists()) partFile.delete()
+            if (!tempFile.renameTo(partFile)) {
+                throw IOException("No se pudo finalizar el fragmento descargado.")
+            }
+            onProgress(partFile.length())
+            return
         }
-        onProgress(partFile.length())
     }
 
     private fun parseContentRangeStart(contentRange: String?): Long? {
@@ -1379,9 +1422,24 @@ class DownloadService : Service() {
     }
 
     private fun stopSelfIfIdle() {
-        if (activeJobs.isEmpty()) {
-            stopForeground(STOP_FOREGROUND_REMOVE)
-            stopSelf()
+        serviceScope.launch {
+            try {
+                val downloading = database.downloadDao().getCurrentlyDownloading()
+                val queued = database.downloadDao().getQueuedDownloads()
+                if (activeJobs.isEmpty() && downloading.isEmpty() && queued.isEmpty()) {
+                    val paused = database.downloadDao().getUnfinishedDownloads().filter { it.status == DownloadState.PAUSED.name }
+                    if (paused.isEmpty()) {
+                        try {
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                            stopSelf()
+                        } catch (_: Exception) {}
+                    } else {
+                        throttledUpdateNotifications()
+                    }
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "Error in stopSelfIfIdle: ${t.message}")
+            }
         }
     }
 

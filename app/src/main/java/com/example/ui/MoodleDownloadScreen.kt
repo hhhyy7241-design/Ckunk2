@@ -13,6 +13,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -36,6 +37,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -95,6 +97,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -152,9 +155,7 @@ import com.example.data.SpeedLimit
 import com.example.data.ThemeMode
 import com.example.model.DownloadState
 import com.example.model.MoodleManifest
-import com.example.ui.components.LottieCelebrationAnimation
 import com.example.ui.components.LottieDownloadGraphic
-import com.example.ui.components.LottieEqualizerChunks
 import com.example.ui.components.LottieScannerBeam
 import com.example.ui.theme.BrandGradient
 import com.example.ui.theme.BrandRadialGlowDark
@@ -314,6 +315,7 @@ fun MoodleDownloadScreen(
                     onDeleteCompleted = { viewModel.deleteCompletedItem(it) },
                     onDeleteSelectedCompleted = { viewModel.deleteSelectedCompleted(it) },
                     onClearCompleted = { viewModel.clearAllCompleted() },
+                    onReDownload = { code, name -> viewModel.reDownload(code, name) },
                     onGoToDownload = { viewModel.selectTab(0) }
                 )
             }
@@ -1020,6 +1022,7 @@ fun ActiveTasksTab(
     onDeleteCompleted: (String) -> Unit,
     onDeleteSelectedCompleted: (List<String>) -> Unit,
     onClearCompleted: () -> Unit,
+    onReDownload: (String, String) -> Unit,
     onGoToDownload: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1313,10 +1316,7 @@ fun ActiveTasksTab(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            SectionHeader(title = "Completados", count = completedDownloads.size, color = SuccessGreen)
-                            LottieCelebrationAnimation(sizeDp = 26.dp, reducedMotion = reducedMotion)
-                        }
+                        SectionHeader(title = "Completados", count = completedDownloads.size, color = SuccessGreen)
 
                         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             Button(
@@ -1375,7 +1375,8 @@ fun ActiveTasksTab(
                             }
                         }
                     },
-                    onDelete = { onDeleteCompleted(item.id) }
+                    onDelete = { onDeleteCompleted(item.id) },
+                    onReDownload = onReDownload
                 )
             }
         }
@@ -1447,8 +1448,18 @@ fun ActiveTaskCard(
     val isError = task.status == DownloadState.ERROR.name
 
     val percent = if (task.totalBytes > 0) {
-        ((task.downloadedBytes * 100) / task.totalBytes).toInt().coerceIn(0, 99)
+        ((task.downloadedBytes * 100) / task.totalBytes).toInt().coerceIn(0, 100)
     } else 0
+
+    val progressFraction = if (task.totalBytes > 0) {
+        (task.downloadedBytes.toFloat() / task.totalBytes.toFloat()).coerceIn(0f, 1f)
+    } else 0f
+
+    val animatedProgress by animateFloatAsState(
+        targetValue = progressFraction,
+        animationSpec = tween(durationMillis = 300),
+        label = "task_progress_smooth"
+    )
 
     Card(
         modifier = Modifier
@@ -1527,7 +1538,12 @@ fun ActiveTaskCard(
                             .padding(horizontal = 10.dp, vertical = 5.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            LottieEqualizerChunks(modifier = Modifier.size(width = 14.dp, height = 12.dp), reducedMotion = reducedMotion)
+                            Icon(
+                                imageVector = Icons.Default.ArrowDownward,
+                                contentDescription = null,
+                                tint = if (isDark) ElectricCyan else Color(0xFF007399),
+                                modifier = Modifier.size(14.dp)
+                            )
                             Text(
                                 text = displaySpeed,
                                 fontFamily = DmSansFontFamily,
@@ -1620,13 +1636,17 @@ fun ActiveTaskCard(
                 }
             }
 
-            PartsProgressVisualization(
-                totalParts = task.totalParts,
-                completedParts = task.completedParts,
-                currentPart = task.currentPart,
+            AccurateTaskProgressBar(
+                progressFraction = animatedProgress,
+                isIndeterminate = task.totalBytes <= 0L,
                 isPaused = isPaused,
                 isError = isError,
-                pulseAlpha = pulseAlpha
+                downloadedBytes = task.downloadedBytes,
+                totalBytes = task.totalBytes,
+                currentPart = task.currentPart,
+                totalParts = task.totalParts,
+                completedParts = task.completedParts,
+                isDark = isDark
             )
 
             if (!task.errorMessage.isNullOrBlank()) {
@@ -1699,83 +1719,83 @@ fun ActiveTaskCard(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Barra de progreso continua, fluida y exacta que refleja fielmente los bytes descargados
+ * respecto al total, con soporte para fragmentos e indicador indeterminado.
+ */
 @Composable
-fun PartsProgressVisualization(
-    totalParts: Int,
-    completedParts: Int,
-    currentPart: Int,
+fun AccurateTaskProgressBar(
+    progressFraction: Float,
+    isIndeterminate: Boolean,
     isPaused: Boolean,
     isError: Boolean,
-    pulseAlpha: Float
+    downloadedBytes: Long,
+    totalBytes: Long,
+    currentPart: Int,
+    totalParts: Int,
+    completedParts: Int,
+    isDark: Boolean
 ) {
-    if (totalParts > 13) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Row(modifier = Modifier.fillMaxSize()) {
-                val completedFraction = (completedParts.toFloat() / totalParts).coerceIn(0f, 1f)
-                val currentFraction = if (!isPaused && !isError && currentPart > completedParts) {
-                    (1f / totalParts).coerceIn(0f, 1f - completedFraction)
-                } else 0f
-
-                if (completedFraction > 0f) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        if (isIndeterminate) {
+            LinearProgressIndicator(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp)),
+                color = ElectricCyan,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(10.dp)
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                val safeWidth = progressFraction.coerceIn(0f, 1f)
+                if (safeWidth > 0f) {
                     Box(
                         modifier = Modifier
-                            .weight(completedFraction)
-                            .fillMaxSize()
-                            .background(BrandGradient)
-                    )
-                }
-                if (currentFraction > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .weight(currentFraction)
-                            .fillMaxSize()
-                            .background(ElectricCyan.copy(alpha = pulseAlpha))
-                    )
-                }
-                val remainingFraction = 1f - completedFraction - currentFraction
-                if (remainingFraction > 0f) {
-                    Box(
-                        modifier = Modifier
-                            .weight(remainingFraction)
-                            .fillMaxSize()
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
+                            .fillMaxWidth(safeWidth)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(5.dp))
+                            .then(
+                                when {
+                                    isError -> Modifier.background(ErrorRose)
+                                    isPaused -> Modifier.background(WarningAmber)
+                                    else -> Modifier.background(BrandGradient)
+                                }
+                            )
                     )
                 }
             }
         }
-    } else {
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-            maxItemsInEachRow = totalParts.coerceAtMost(13)
-        ) {
-            for (i in 1..totalParts) {
-                val isDone = i <= completedParts
-                val isCurrent = i == currentPart && !isPaused && !isError
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f, fill = true)
-                        .defaultMinSize(minWidth = 14.dp)
-                        .height(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .then(
-                            when {
-                                isDone -> Modifier.background(BrandGradient)
-                                isCurrent -> Modifier
-                                    .background(ElectricCyan.copy(alpha = pulseAlpha))
-                                    .border(1.dp, ElectricBlue, RoundedCornerShape(4.dp))
-                                else -> Modifier.background(MaterialTheme.colorScheme.surfaceVariant)
-                            }
-                        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${FileUtils.formatBytes(downloadedBytes)} de ${FileUtils.formatBytes(totalBytes)}",
+                fontFamily = DmSansFontFamily,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (totalParts > 1) {
+                Text(
+                    text = "Parte $currentPart de $totalParts ($completedParts completadas)",
+                    fontFamily = DmSansFontFamily,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (isDark) ElectricCyan else Color(0xFF007399)
                 )
             }
         }
@@ -1892,12 +1912,23 @@ fun CompletedFileCard(
     onToggleSelect: () -> Unit,
     onLongClick: () -> Unit,
     onShare: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onReDownload: (String, String) -> Unit
 ) {
+    val context = LocalContext.current
     val fileIcon = getFileIconForExtension(item.fileName)
     val isSuccess = item.status == DownloadState.COMPLETED.name
     val isWarning = item.status == "COMPLETED_WARN_HASH"
     val isDark = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+
+    // Verificación en tiempo real si el archivo existe físicamente en el almacenamiento del dispositivo
+    val fileExistsInStorage = remember(item.mediaStoreUri, item.savedPath, item.fileName) {
+        FileUtils.isFileInStorage(context, item.mediaStoreUri, item.savedPath, item.fileName)
+    }
+    val actualStorageBytes = remember(fileExistsInStorage, item.mediaStoreUri, item.savedPath, item.fileName) {
+        if (fileExistsInStorage) FileUtils.getFileStorageSize(context, item.mediaStoreUri, item.savedPath, item.fileName) else 0L
+    }
+    val displayBytes = if (actualStorageBytes > 0L) actualStorageBytes else item.totalBytes
 
     Card(
         modifier = Modifier
@@ -1905,7 +1936,13 @@ fun CompletedFileCard(
             .clip(RoundedCornerShape(22.dp))
             .combinedClickable(
                 onClick = {
-                    if (isSelectionMode) onToggleSelect() else onShare()
+                    if (isSelectionMode) {
+                        onToggleSelect()
+                    } else if (fileExistsInStorage) {
+                        onShare()
+                    } else {
+                        Toast.makeText(context, "El archivo ya no se encuentra en el almacenamiento. Puedes descargarlo de nuevo.", Toast.LENGTH_SHORT).show()
+                    }
                 },
                 onLongClick = onLongClick
             ),
@@ -1916,6 +1953,7 @@ fun CompletedFileCard(
         border = CardDefaults.outlinedCardBorder().copy(
             brush = androidx.compose.ui.graphics.SolidColor(
                 if (isSelected) ElectricCyan
+                else if (!fileExistsInStorage) WarningAmber.copy(alpha = 0.5f)
                 else if (isSuccess) SuccessGreen.copy(alpha = 0.35f)
                 else WarningAmber.copy(alpha = 0.35f)
             )
@@ -1954,13 +1992,17 @@ fun CompletedFileCard(
                     modifier = Modifier
                         .size(44.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(if (isSuccess) SuccessGreen.copy(alpha = 0.15f) else WarningAmber.copy(alpha = 0.15f)),
+                        .background(
+                            if (!fileExistsInStorage) WarningAmber.copy(alpha = 0.15f)
+                            else if (isSuccess) SuccessGreen.copy(alpha = 0.15f)
+                            else WarningAmber.copy(alpha = 0.15f)
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         imageVector = fileIcon,
                         contentDescription = null,
-                        tint = if (isSuccess) SuccessGreen else WarningAmber,
+                        tint = if (!fileExistsInStorage) WarningAmber else if (isSuccess) SuccessGreen else WarningAmber,
                         modifier = Modifier.size(22.dp)
                     )
                 }
@@ -1978,20 +2020,30 @@ fun CompletedFileCard(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = FileUtils.formatBytes(item.totalBytes),
+                            text = FileUtils.formatBytes(displayBytes),
                             fontFamily = DmSansFontFamily,
                             fontSize = 12.sp,
                             color = if (isDark) ElectricCyan else Color(0xFF007399),
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(text = "•", color = MaterialTheme.colorScheme.outline)
-                        Text(
-                            text = if (isSuccess) "Completado" else "Guardado (aviso hash)",
-                            fontFamily = DmSansFontFamily,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = if (isSuccess) SuccessGreen else WarningAmber
-                        )
+                        if (fileExistsInStorage) {
+                            Text(
+                                text = "En almacenamiento",
+                                fontFamily = DmSansFontFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = SuccessGreen
+                            )
+                        } else {
+                            Text(
+                                text = "No encontrado en disco",
+                                fontFamily = DmSansFontFamily,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = WarningAmber
+                            )
+                        }
                     }
                 }
 
@@ -2003,37 +2055,67 @@ fun CompletedFileCard(
                 }
             }
 
-            // ÚNICAMENTE botón de Compartir y Borrar (se quitó completamente Abrir / Instalar)
+            // Acciones: Si el archivo existe -> Compartir / Borrar. Si fue borrado del disco -> Volver a descargar / Eliminar
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Button(
-                    onClick = onShare,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .defaultMinSize(minHeight = 42.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        contentColor = MaterialTheme.colorScheme.onSurface
-                    )
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = null, tint = ElectricCyan, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Compartir", fontFamily = DmSansFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                }
+                if (fileExistsInStorage) {
+                    Button(
+                        onClick = onShare,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 42.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            contentColor = MaterialTheme.colorScheme.onSurface
+                        )
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = null, tint = ElectricCyan, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Compartir", fontFamily = DmSansFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
 
-                OutlinedButton(
-                    onClick = onDelete,
-                    shape = RoundedCornerShape(14.dp),
-                    modifier = Modifier.defaultMinSize(minHeight = 42.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRose),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ErrorRose.copy(alpha = 0.4f))
-                ) {
-                    Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Borrar", fontFamily = DmSansFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    OutlinedButton(
+                        onClick = onDelete,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.defaultMinSize(minHeight = 42.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRose),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ErrorRose.copy(alpha = 0.4f))
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Borrar", fontFamily = DmSansFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                } else {
+                    Button(
+                        onClick = { onReDownload(item.code, item.fileName) },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier
+                            .weight(1f)
+                            .defaultMinSize(minHeight = 42.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = ElectricBlue,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Volver a descargar", fontFamily = DmSansFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = onDelete,
+                        shape = RoundedCornerShape(14.dp),
+                        modifier = Modifier.defaultMinSize(minHeight = 42.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = ErrorRose),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ErrorRose.copy(alpha = 0.4f))
+                    ) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Eliminar", fontFamily = DmSansFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
                 }
             }
         }

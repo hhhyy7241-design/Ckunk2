@@ -216,6 +216,24 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
     }
     fun clearAllCompleted() = viewModelScope.launch { repository.clearCompleted() }
 
+    fun reDownload(code: String, customFileName: String? = null) {
+        viewModelScope.launch {
+            try {
+                when (val result = MoodleCodeParser.parse(code)) {
+                    is MoodleCodeParser.ParseResult.Success -> {
+                        repository.enqueueDownload(code, result.manifest, customFileName)
+                        _snackbarEvent.emit(AddDownloadSnackbarEvent(message = "Descarga añadida a la cola", actionLabel = "Ver", targetTab = 1))
+                    }
+                    is MoodleCodeParser.ParseResult.Error -> {
+                        _snackbarEvent.emit(AddDownloadSnackbarEvent(message = "No se pudo volver a descargar: ${result.message}", null))
+                    }
+                }
+            } catch (e: Exception) {
+                _snackbarEvent.emit(AddDownloadSnackbarEvent(message = "Error: ${e.message}", null))
+            }
+        }
+    }
+
     // Bienvenida
     fun checkWelcomeSheetEligibility() {
         val s = settingsManager.settings.value
