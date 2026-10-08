@@ -17,7 +17,6 @@ local.properties
 .env
 debug.keystore
 
-# Signing keys
+# Signing keys - NEVER commit release keystores
 *.jks
-!my-upload-key.jks
-!app/my-upload-key.jks
+*.keystore

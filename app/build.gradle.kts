@@ -24,22 +24,32 @@ android {
   }
 
   signingConfigs {
+    val keystorePathEnv = System.getenv("KEYSTORE_PATH")
+    val storePasswordEnv = System.getenv("STORE_PASSWORD") ?: "android"
+    val defaultKeyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+    val keyPasswordEnv = System.getenv("KEY_PASSWORD") ?: "android"
+
+    val resolvedStoreFile: File? = when {
+      !keystorePathEnv.isNullOrBlank() && File(keystorePathEnv).exists() -> File(keystorePathEnv)
+      rootProject.file("my-upload-key.jks").exists() -> rootProject.file("my-upload-key.jks")
+      file("my-upload-key.jks").exists() -> file("my-upload-key.jks")
+      rootProject.file("release.keystore").exists() -> rootProject.file("release.keystore")
+      file("release.keystore").exists() -> file("release.keystore")
+      rootProject.file("debug.keystore").exists() -> rootProject.file("debug.keystore")
+      file("debug.keystore").exists() -> file("debug.keystore")
+      else -> null
+    }
+
+    val isDebugKeystore = resolvedStoreFile != null && resolvedStoreFile.name.contains("debug", ignoreCase = true)
+    val resolvedKeyAlias = if (isDebugKeystore && System.getenv("KEY_ALIAS").isNullOrBlank()) "androiddebugkey" else defaultKeyAlias
+
     create("release") {
-      val envPath = System.getenv("KEYSTORE_PATH")
-      val keystoreCandidate = when {
-        !envPath.isNullOrBlank() && File(envPath).exists() -> File(envPath)
-        !envPath.isNullOrBlank() && rootProject.file(envPath).exists() -> rootProject.file(envPath)
-        !envPath.isNullOrBlank() && file(envPath).exists() -> file(envPath)
-        rootProject.file("my-upload-key.jks").exists() -> rootProject.file("my-upload-key.jks")
-        file("my-upload-key.jks").exists() -> file("my-upload-key.jks")
-        rootProject.file("debug.keystore").exists() -> rootProject.file("debug.keystore")
-        file("debug.keystore").exists() -> file("debug.keystore")
-        else -> rootProject.file("my-upload-key.jks")
+      if (resolvedStoreFile != null) {
+        storeFile = resolvedStoreFile
       }
-      storeFile = keystoreCandidate
-      storePassword = System.getenv("STORE_PASSWORD") ?: "android"
-      keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
-      keyPassword = System.getenv("KEY_PASSWORD") ?: "android"
+      storePassword = storePasswordEnv
+      keyAlias = resolvedKeyAlias
+      keyPassword = keyPasswordEnv
     }
   }
 
@@ -48,7 +58,9 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      signingConfig = signingConfigs.getByName("release")
+      if (signingConfigs.names.contains("release")) {
+        signingConfig = signingConfigs.getByName("release")
+      }
     }
     debug { }
   }
@@ -102,7 +114,6 @@ dependencies {
   // implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
-  implementation(libs.androidx.work.runtime.ktx)
   // implementation(libs.coil.compose)
   implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)

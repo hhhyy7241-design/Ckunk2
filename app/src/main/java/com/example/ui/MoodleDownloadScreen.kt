@@ -2214,6 +2214,13 @@ fun SettingsBottomSheet(
                         onOptionSelected = onMaxConcurrentPartsChange
                     )
 
+                    Text(
+                        text = "Límite de seguridad: máximo 8 conexiones de fragmentos entre todas las descargas para evitar saturar el teléfono o el servidor.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = DmSansFontFamily
+                    )
+
                     SettingRadioGroupRow(
                         title = "Al agregar una descarga",
                         description = "Comportamiento al presionar el botón de descarga.",
@@ -2300,6 +2307,48 @@ fun SettingsBottomSheet(
                         Icon(Icons.Default.BatteryChargingFull, contentDescription = null, tint = ElectricCyan, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("Verificar permisos y batería en segundo plano", fontFamily = DmSansFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    }
+                }
+            }
+
+            // SECCIÓN: Almacenamiento
+            item {
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                Spacer(modifier = Modifier.height(4.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Almacenamiento",
+                        fontFamily = DmSansFontFamily,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = ElectricCyan,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                    ) {
+                        Column(modifier = Modifier.padding(14.dp)) {
+                            Text(
+                                text = "Archivos terminados",
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = DmSansFontFamily
+                            )
+                            Text(
+                                text = "Download/Chunk",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = DmSansFontFamily
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Las partes temporales se guardan en el almacenamiento privado de la app y se eliminan después de verificar el archivo.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontFamily = DmSansFontFamily
+                            )
+                        }
                     }
                 }
             }

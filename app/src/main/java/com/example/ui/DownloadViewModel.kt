@@ -176,23 +176,25 @@ class DownloadViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             try {
                 val currentRunning = downloadingDownloads.value.size
-                val limit = settingsManager.settings.value.maxConcurrentDownloads
-                val isQueue = currentRunning >= limit || settingsManager.settings.value.addDownloadBehavior == AddDownloadBehavior.ADD_TO_QUEUE_ONLY
-                val queuePos = queuedDownloads.value.size + 1
+                val settings = settingsManager.settings.value
+                val isQueue = currentRunning >= settings.maxConcurrentDownloads ||
+                    settings.addDownloadBehavior == AddDownloadBehavior.ADD_TO_QUEUE_ONLY
 
                 repository.enqueueDownload(code, manifest, customFileName)
 
                 val msg = if (isQueue) {
-                    "Agregada a la cola (#$queuePos)"
+                    "Agregada a la cola"
                 } else {
-                    "Descargando ${manifest.filename}"
+                    "Descarga añadida"
                 }
 
                 _snackbarEvent.emit(AddDownloadSnackbarEvent(message = msg, actionLabel = "Ver", targetTab = 1))
 
-                // Siempre deja el campo vacío listo para el siguiente código
-                _codeText.value = ""
-                _parseState.value = ParseUiState.Idle
+                // Respeta la preferencia: si está desactivada, conserva el código para editar/reintentar.
+                if (settings.autoClearOnStart) {
+                    _codeText.value = ""
+                    _parseState.value = ParseUiState.Idle
+                }
             } catch (e: Exception) {
                 _snackbarEvent.emit(AddDownloadSnackbarEvent(message = "Error: ${e.message}", actionLabel = null))
             }

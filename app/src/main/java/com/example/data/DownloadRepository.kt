@@ -4,6 +4,7 @@ import android.content.Context
 import com.example.model.DownloadState
 import com.example.model.MoodleManifest
 import com.example.service.DownloadService
+import com.example.parser.MoodleCodeParser
 import kotlinx.coroutines.flow.Flow
 import java.util.UUID
 
@@ -25,7 +26,7 @@ class DownloadRepository(private val context: Context) {
         customFileName: String? = null
     ): String {
         val downloadId = UUID.randomUUID().toString()
-        val finalFileName = customFileName?.ifBlank { null } ?: manifest.filename
+        val finalFileName = MoodleCodeParser.sanitizeFilename(customFileName?.ifBlank { null } ?: manifest.filename)
         val maxPos = downloadDao.getMaxQueuePosition() ?: 0
 
         val entity = DownloadEntity(

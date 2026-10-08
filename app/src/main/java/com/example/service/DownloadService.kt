@@ -83,6 +83,7 @@ class DownloadService : Service() {
         const val NOTIFICATION_GROUP_KEY = "com.example.downloadchunk.DOWNLOAD_GROUP"
         const val NOTIFICATION_SUMMARY_ID = 1000
         private const val BUFFER_SIZE = 1024 * 512 // 512 KiB buffer
+        private const val MAX_GLOBAL_PART_CONNECTIONS = 8
 
         const val ACTION_START = "com.example.service.ACTION_START"
         const val ACTION_PAUSE = "com.example.service.ACTION_PAUSE"
@@ -139,10 +140,16 @@ class DownloadService : Service() {
 
     // Sincronización y colas seguras
     private val mutexMap = ConcurrentHashMap<String, Mutex>()
+    /** Serializes queue admission so concurrent service commands can never oversubscribe slots. */
+    private val queueMutex = Mutex()
+    /** Safety ceiling across all downloads; per-download settings still apply inside this limit. */
+    private val globalPartSemaphore = Semaphore(MAX_GLOBAL_PART_CONNECTIONS)
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val activeCalls = ConcurrentHashMap<String, MutableSet<Call>>()
     private val pausingFlags = ConcurrentHashMap<String, AtomicBoolean>()
     private val retryAttempts = ConcurrentHashMap<String, AtomicInteger>()
+    /** Prevents individual Job.finally blocks from starting new queue work during bulk actions. */
+    private val suppressAutoQueue = AtomicBoolean(false)
 
     // Rate limiter para notificaciones (máximo 2 por segundo = 500ms entre actualizaciones)
     private var lastNotificationUpdateTime = 0L
@@ -168,6 +175,8 @@ class DownloadService : Service() {
         initLocks()
         registerNetworkCallback()
         observeSettingsChanges()
+        // Recover leaked RUNNING rows whenever Android recreates the service.
+        serviceScope.launch { restoreActiveDownloads() }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -337,17 +346,36 @@ class DownloadService : Service() {
     }
 
     private suspend fun handlePauseAllCommand() {
-        Log.d(TAG, "Pausing all active downloads")
-        val downloading = database.downloadDao().getCurrentlyDownloading()
-        for (item in downloading) {
-            handlePauseCommand(item.id)
+        suppressAutoQueue.set(true)
+        try {
+            Log.d(TAG, "Pausing all active downloads")
+            val downloading = database.downloadDao().getCurrentlyDownloading()
+            for (item in downloading) {
+                pausingFlags[item.id]?.set(true)
+                activeCalls[item.id]?.forEach { call ->
+                    try { call.cancel() } catch (_: Exception) {}
+                }
+            }
+            for (item in downloading) {
+                try { activeJobs[item.id]?.cancelAndJoin() } catch (_: Exception) {}
+                activeJobs.remove(item.id)
+                database.downloadDao().updateStatus(
+                    item.id,
+                    DownloadState.PAUSED.name,
+                    null,
+                    pausedByNetwork = false
+                )
+            }
+            releaseLocksIfIdle()
+            throttledUpdateNotifications()
+        } finally {
+            suppressAutoQueue.set(false)
         }
     }
 
     private suspend fun handleResumeAllCommand() {
         Log.d(TAG, "Resuming all paused downloads")
         val dao = database.downloadDao()
-        val paused = dao.getAllDownloads()
         // Poner en cola todas las pausadas
         val unstarted = dao.getUnfinishedDownloads()
         for (item in unstarted) {
@@ -359,12 +387,28 @@ class DownloadService : Service() {
     }
 
     private suspend fun handleCancelAllCommand() {
-        Log.d(TAG, "Cancelling all active and queued downloads")
-        val unstarted = database.downloadDao().getUnfinishedDownloads()
-        for (item in unstarted) {
-            handleCancelCommand(item.id)
+        suppressAutoQueue.set(true)
+        try {
+            Log.d(TAG, "Cancelling all active and queued downloads")
+            val unfinished = database.downloadDao().getUnfinishedDownloads()
+            for (item in unfinished) {
+                pausingFlags[item.id]?.set(true)
+                activeCalls[item.id]?.forEach { call ->
+                    try { call.cancel() } catch (_: Exception) {}
+                }
+            }
+            for (item in unfinished) {
+                try { activeJobs[item.id]?.cancelAndJoin() } catch (_: Exception) {}
+                activeJobs.remove(item.id)
+                database.downloadDao().updateStatus(item.id, DownloadState.CANCELLED.name, null)
+                notificationManager.cancel(item.id.hashCode())
+            }
+            releaseLocksIfIdle()
+            notificationManager.cancel(NOTIFICATION_SUMMARY_ID)
+            throttledUpdateNotifications()
+        } finally {
+            suppressAutoQueue.set(false)
         }
-        notificationManager.cancel(NOTIFICATION_SUMMARY_ID)
     }
 
     private suspend fun handleMoveToTopCommand(downloadId: String) {
@@ -401,6 +445,12 @@ class DownloadService : Service() {
      * Procesador central de la cola de descargas respetando el límite de simultaneidad.
      */
     private suspend fun processQueue() {
+        queueMutex.withLock {
+            processQueueLocked()
+        }
+    }
+
+    private suspend fun processQueueLocked() {
         val settings = settingsManager.settings.value
         val maxLimit = settings.maxConcurrentDownloads
 
@@ -413,10 +463,13 @@ class DownloadService : Service() {
             val excessCount = -availableSlots
             val currentlyActive = database.downloadDao().getCurrentlyDownloading()
             val toPause = currentlyActive.takeLast(excessCount)
-            for (item in toPause) {
-                Log.d(TAG, "Real-time pausing excess download to conform to max limit: ${item.id}")
-                handlePauseCommand(item.id)
-                database.downloadDao().updateStatus(item.id, DownloadState.QUEUED.name, null, pausedByNetwork = false)
+            // Do not call handlePauseCommand inline: it may itself request processQueue(),
+            // which would re-enter queueMutex. Schedule the pause after this lock is released.
+            serviceScope.launch {
+                for (item in toPause) {
+                    Log.d(TAG, "Pausing excess download to conform to max limit: ${item.id}")
+                    handlePauseCommand(item.id)
+                }
             }
             throttledUpdateNotifications()
             return
@@ -460,7 +513,11 @@ class DownloadService : Service() {
         pausingFlags[downloadId] = AtomicBoolean(false)
         database.downloadDao().updateStatus(downloadId, DownloadState.DOWNLOADING.name, null, pausedByNetwork = false)
 
-        val job = serviceScope.launch {
+        // Registrar el Job antes de arrancarlo evita una carrera: una descarga muy rápida
+        // podía terminar antes de que activeJobs recibiera su referencia.
+        val job = Job(serviceScope.coroutineContext[Job])
+        activeJobs[downloadId] = job
+        serviceScope.launch(job) {
             try {
                 Log.d(TAG, "Starting download pipeline for $downloadId (${entity.fileName})")
                 executeDownloadPipeline(entity)
@@ -480,15 +537,14 @@ class DownloadService : Service() {
                 releaseLocksIfIdle()
                 throttledUpdateNotifications()
 
-                // Arrancar siguiente en cola
-                if (settingsManager.settings.value.autoStartNext) {
+                // Arrancar siguiente en cola salvo durante una operación global.
+                if (!suppressAutoQueue.get() && settingsManager.settings.value.autoStartNext) {
                     processQueue()
                 }
                 stopSelfIfIdle()
             }
         }
 
-        activeJobs[downloadId] = job
         throttledUpdateNotifications()
     }
 
@@ -543,14 +599,26 @@ class DownloadService : Service() {
                 val tempFile = File(partsDirectory, "%05d.tmp".format(part.index))
 
                 if (partFile.exists() && partFile.length() > 0L) {
-                    continue
+                    val length = partFile.length()
+                    // A completed part must be non-empty. For a multi-part manifest, a zero-byte
+                    // or obviously truncated fragment is never trusted merely because the file exists.
+                    val looksPlausible = if (totalParts == 1) {
+                        length == totalManifestSize
+                    } else {
+                        length >= 1024L
+                    }
+                    if (looksPlausible) {
+                        continue
+                    }
+                    partFile.delete()
                 }
 
                 launch {
                     semaphore.withPermit {
-                        if (!coroutineScopeIsActive() || pausingFlags[entity.id]?.get() == true) return@withPermit
+                        globalPartSemaphore.withPermit {
+                            if (!coroutineScopeIsActive() || pausingFlags[entity.id]?.get() == true) return@withPermit
 
-                        downloadPartWithRange(
+                            downloadPartWithRange(
                             downloadId = entity.id,
                             partUrl = part.url,
                             tempFile = tempFile,
@@ -619,6 +687,7 @@ class DownloadService : Service() {
                                 )
                             }
                             throttledUpdateNotifications()
+                            }
                         }
                     }
                 }

@@ -36,52 +36,54 @@ jobs:
 
       - name: Prepare Local Environment and Permissions
         run: |
-          # Asegurar existencia y permisos del Gradle Wrapper
+          # 1. Otorgar permisos de ejecucion al wrapper y generarlo si no existe
           if [ ! -f "gradlew" ]; then
-            echo "gradlew no encontrado. Generando wrapper con gradle..."
+            echo "gradlew no encontrado. Generando wrapper..."
             gradle wrapper
           fi
           chmod +x gradlew || true
 
-          # Archivos de entorno requeridos por el plugin Secrets Gradle
-          touch .env
-          touch .env.example
+          # 2. Crear archivos locales vacios .env y .env.example para Secrets Gradle plugin
+          touch .env && touch .env.example
 
-      - name: Configure Keystore and Dynamic Alias Detection
+      - name: Setup Keystore and Dynamic Key Alias Detection
         run: |
+          set -euo pipefail
           KEYSTORE_FILE="my-upload-key.jks"
-          KEY_PASS="android"
-          STORE_PASS="android"
+          DEFAULT_ALIAS="upload"
+          STORE_PASS="${STORE_PASSWORD:-android}"
+          KEY_PASS="${KEY_PASSWORD:-android}"
 
-          # Si no existe keystore en el repositorio, generarlo automáticamente
           if [ ! -f "$KEYSTORE_FILE" ]; then
-            echo "Keystore no encontrado. Generando keystore de firma release..."
+            echo "Keystore $KEYSTORE_FILE no encontrado. Generando keystore de firma release automaticamente..."
             keytool -genkeypair -v \
               -keystore "$KEYSTORE_FILE" \
-              -alias "upload" \
+              -alias "$DEFAULT_ALIAS" \
               -keyalg RSA \
               -keysize 2048 \
               -validity 10000 \
               -storepass "$STORE_PASS" \
               -keypass "$KEY_PASS" \
-              -dname "CN=DownloadChunk, OU=Mobile, O=DownloadChunk, L=City, ST=State, C=US"
+              -dname "CN=DownloadChunk, OU=Mobile, O=AIStudio, L=City, S=State, C=US"
           fi
 
-          # Detección dinámica de alias mediante keytool
-          DETECTED_ALIAS=$(keytool -list -v -keystore "$KEYSTORE_FILE" -storepass "$STORE_PASS" 2>/dev/null | grep -i "Alias name:" | head -n 1 | awk -F': ' '{print $2}' | xargs)
+          # Inspeccionar dinamicamente con keytool el alias del keystore existente
+          DETECTED_ALIAS=$(keytool -list -v -keystore "$KEYSTORE_FILE" -storepass "$STORE_PASS" 2>/dev/null | grep -i "Alias name:" | head -n 1 | awk -F': ' '{print $2}' | tr -d '\r' | xargs || true)
+
           if [ -z "$DETECTED_ALIAS" ]; then
-            DETECTED_ALIAS="upload"
+            DETECTED_ALIAS="$DEFAULT_ALIAS"
           fi
-          echo "Alias detectado para firma: $DETECTED_ALIAS"
 
-          # Exportar variables de entorno para Gradle
-          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/$KEYSTORE_FILE" >> $GITHUB_ENV
-          echo "KEY_ALIAS=$DETECTED_ALIAS" >> $GITHUB_ENV
-          echo "STORE_PASSWORD=$STORE_PASS" >> $GITHUB_ENV
-          echo "KEY_PASSWORD=$KEY_PASS" >> $GITHUB_ENV
+          echo "Detected Key Alias: $DETECTED_ALIAS"
 
-          # Copia de seguridad en la raíz y en el subdirectorio app/
-          cp -f "$KEYSTORE_FILE" "app/$KEYSTORE_FILE" || true
+          # Copia redundante en la raiz ($GITHUB_WORKSPACE) y en app/
+          cp -f "$KEYSTORE_FILE" "app/$KEYSTORE_FILE"
+
+          # Exportar variables de entorno a GITHUB_ENV
+          echo "KEYSTORE_PATH=$GITHUB_WORKSPACE/$KEYSTORE_FILE" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$DETECTED_ALIAS" >> "$GITHUB_ENV"
+          echo "STORE_PASSWORD=$STORE_PASS" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
 
       - name: Build Release APK
         run: |
@@ -111,18 +113,3 @@ jobs:
           path: app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 30
-
-      - name: Publish Direct APK to GitHub Releases
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: latest
-          name: "Download Chunk - APK Instalable"
-          body: |
-            ### 📱 Download Chunk (Última Versión)
-            Descarga directa para instalar o actualizar la app en tu teléfono Android:
-            - **Descarga directa:** Haz clic en `app-release.apk` abajo para descargar e instalar directamente.
-            - **Firma persistente:** Conserva la misma firma (`my-upload-key.jks`) para actualizar sobre versiones previas sin desinstalar.
-          files: app/build/outputs/apk/release/*.apk
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
