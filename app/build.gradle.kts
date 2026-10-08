@@ -1,4 +1,5 @@
 import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
+import java.io.File
 
 plugins {
   alias(libs.plugins.android.application)
@@ -26,10 +27,13 @@ android {
     create("release") {
       val envPath = System.getenv("KEYSTORE_PATH")
       val keystoreCandidate = when {
+        !envPath.isNullOrBlank() && File(envPath).exists() -> File(envPath)
+        !envPath.isNullOrBlank() && rootProject.file(envPath).exists() -> rootProject.file(envPath)
         !envPath.isNullOrBlank() && file(envPath).exists() -> file(envPath)
         rootProject.file("my-upload-key.jks").exists() -> rootProject.file("my-upload-key.jks")
         file("my-upload-key.jks").exists() -> file("my-upload-key.jks")
         rootProject.file("debug.keystore").exists() -> rootProject.file("debug.keystore")
+        file("debug.keystore").exists() -> file("debug.keystore")
         else -> rootProject.file("my-upload-key.jks")
       }
       storeFile = keystoreCandidate
