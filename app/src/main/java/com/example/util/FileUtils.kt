@@ -15,8 +15,21 @@ object FileUtils {
         val units = arrayOf("B", "KB", "MB", "GB", "TB")
         val digitGroups = (Math.log10(bytes.toDouble()) / Math.log10(1024.0)).toInt().coerceIn(0, units.size - 1)
         val value = bytes / Math.pow(1024.0, digitGroups.toDouble())
-        val df = DecimalFormat("#,##0.##")
+        val df = DecimalFormat("#,##0.#")
         return "${df.format(value)} ${units[digitGroups]}"
+    }
+
+    fun formatSpeed(bytesPerSec: Long): String {
+        if (bytesPerSec <= 0) return "0.0 KB/s"
+        return if (bytesPerSec >= 1024 * 1024) {
+            val mb = bytesPerSec.toDouble() / (1024.0 * 1024.0)
+            val df = DecimalFormat("0.0")
+            "${df.format(mb)} MB/s"
+        } else {
+            val kb = bytesPerSec.toDouble() / 1024.0
+            val df = DecimalFormat("0.0")
+            "${df.format(kb)} KB/s"
+        }
     }
 
     fun getMimeType(fileName: String): String {

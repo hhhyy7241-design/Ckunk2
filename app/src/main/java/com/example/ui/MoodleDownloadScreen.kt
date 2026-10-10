@@ -17,6 +17,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -122,6 +123,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -166,6 +168,12 @@ import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.ElectricCyan
 import com.example.ui.theme.ErrorRose
 import com.example.ui.theme.SuccessGreen
+import com.example.ui.theme.TabularBytes
+import com.example.ui.theme.TabularEta
+import com.example.ui.theme.TabularParts
+import com.example.ui.theme.TabularPercentBig
+import com.example.ui.theme.TabularPercentSign
+import com.example.ui.theme.TabularSpeedBadge
 import com.example.ui.theme.WarningAmber
 import com.example.util.FileUtils
 import kotlinx.coroutines.flow.collectLatest
@@ -288,36 +296,42 @@ fun MoodleDownloadScreen(
                 .widthIn(max = 640.dp),
             contentAlignment = Alignment.TopCenter
         ) {
-            when (selectedTab) {
-                0 -> DownloadInputTab(
-                    codeText = codeText,
-                    parseState = parseState,
-                    downloadingCount = downloadingDownloads.size,
-                    maxConcurrent = settings.maxConcurrentDownloads,
-                    addBehavior = settings.addDownloadBehavior,
-                    onCodeChanged = { viewModel.onCodeChanged(it) },
-                    onStartDownload = { viewModel.startDownload() }
-                )
-                1 -> ActiveTasksTab(
-                    downloadingDownloads = downloadingDownloads,
-                    queuedDownloads = queuedDownloads,
-                    pausedDownloads = pausedDownloads,
-                    completedDownloads = completedDownloads,
-                    listState = activeListState,
-                    onPause = { viewModel.pauseDownload(it) },
-                    onResume = { viewModel.resumeDownload(it) },
-                    onRetry = { viewModel.retryDownload(it) },
-                    onCancel = { viewModel.cancelDownload(it) },
-                    onPauseAll = { viewModel.pauseAll() },
-                    onResumeAll = { viewModel.resumeAll() },
-                    onForceStartNow = { viewModel.forceStartNow(it) },
-                    onMoveToTop = { viewModel.moveToTop(it) },
-                    onDeleteCompleted = { viewModel.deleteCompletedItem(it) },
-                    onDeleteSelectedCompleted = { viewModel.deleteSelectedCompleted(it) },
-                    onClearCompleted = { viewModel.clearAllCompleted() },
-                    onReDownload = { code, name -> viewModel.reDownload(code, name) },
-                    onGoToDownload = { viewModel.selectTab(0) }
-                )
+            Crossfade(
+                targetState = selectedTab,
+                animationSpec = tween(180),
+                label = "tab_crossfade"
+            ) { tab ->
+                when (tab) {
+                    0 -> DownloadInputTab(
+                        codeText = codeText,
+                        parseState = parseState,
+                        downloadingCount = downloadingDownloads.size,
+                        maxConcurrent = settings.maxConcurrentDownloads,
+                        addBehavior = settings.addDownloadBehavior,
+                        onCodeChanged = { viewModel.onCodeChanged(it) },
+                        onStartDownload = { viewModel.startDownload() }
+                    )
+                    1 -> ActiveTasksTab(
+                        downloadingDownloads = downloadingDownloads,
+                        queuedDownloads = queuedDownloads,
+                        pausedDownloads = pausedDownloads,
+                        completedDownloads = completedDownloads,
+                        listState = activeListState,
+                        onPause = { viewModel.pauseDownload(it) },
+                        onResume = { viewModel.resumeDownload(it) },
+                        onRetry = { viewModel.retryDownload(it) },
+                        onCancel = { viewModel.cancelDownload(it) },
+                        onPauseAll = { viewModel.pauseAll() },
+                        onResumeAll = { viewModel.resumeAll() },
+                        onForceStartNow = { viewModel.forceStartNow(it) },
+                        onMoveToTop = { viewModel.moveToTop(it) },
+                        onDeleteCompleted = { viewModel.deleteCompletedItem(it) },
+                        onDeleteSelectedCompleted = { viewModel.deleteSelectedCompleted(it) },
+                        onClearCompleted = { viewModel.clearAllCompleted() },
+                        onReDownload = { code, name -> viewModel.reDownload(code, name) },
+                        onGoToDownload = { viewModel.selectTab(0) }
+                    )
+                }
             }
         }
     }
@@ -546,16 +560,19 @@ private fun PillNavButton(
                 Spacer(modifier = Modifier.width(6.dp))
                 Box(
                     modifier = Modifier
+                        .defaultMinSize(minWidth = 20.dp, minHeight = 18.dp)
                         .clip(CircleShape)
                         .background(if (isSelected) ElectricBlue else ElectricCyan)
-                        .padding(horizontal = 6.dp, vertical = 1.dp)
+                        .padding(horizontal = 4.dp, vertical = 1.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = badge,
                         color = Color.White,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = DmSansFontFamily
+                        fontFamily = DmSansFontFamily,
+                        textAlign = TextAlign.Center
                     )
                 }
             }
@@ -666,15 +683,15 @@ fun DownloadInputTab(
                                 }
                             },
                             shape = RoundedCornerShape(14.dp),
-                            modifier = Modifier.defaultMinSize(minHeight = 44.dp),
+                            modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
                                 contentColor = MaterialTheme.colorScheme.onSurface
                             )
                         ) {
-                            Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(15.dp))
+                            Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Pegar", fontFamily = DmSansFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Pegar", fontFamily = DmSansFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                         }
                     }
 
@@ -690,7 +707,7 @@ fun DownloadInputTab(
                                 text = "https://5.4.3.2.1:...",
                                 fontFamily = FontFamily.Monospace,
                                 fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.outline
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
                             )
                         },
                         textStyle = MaterialTheme.typography.bodyMedium.copy(
@@ -701,16 +718,16 @@ fun DownloadInputTab(
                             if (codeText.isNotEmpty()) {
                                 IconButton(
                                     onClick = { onCodeChanged("") },
-                                    modifier = Modifier.defaultMinSize(minWidth = 44.dp, minHeight = 44.dp)
+                                    modifier = Modifier.defaultMinSize(minWidth = 48.dp, minHeight = 48.dp)
                                 ) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Borrar", tint = MaterialTheme.colorScheme.outline)
+                                    Icon(Icons.Default.Clear, contentDescription = "Borrar", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                         },
                         shape = RoundedCornerShape(18.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = ElectricCyan,
-                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f),
+                            unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
                             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
                             unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
                         )
@@ -746,17 +763,24 @@ fun DownloadInputTab(
                         " • ${FileUtils.formatBytes((parseState as ParseUiState.Valid).manifest.size)}"
                     } else ""
 
+                    val buttonBgBrush = if (isValid) {
+                        BrandGradient
+                    } else {
+                        Brush.linearGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+                            )
+                        )
+                    }
+                    val buttonFgColor = if (isValid) Color.White else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
                             .defaultMinSize(minHeight = 50.dp)
                             .clip(RoundedCornerShape(18.dp))
-                            .background(
-                                if (isValid) BrandGradient
-                                else Brush.linearGradient(
-                                    listOf(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.surfaceVariant)
-                                )
-                            )
+                            .background(buttonBgBrush)
                             .clickable(enabled = isValid, onClick = onStartDownload)
                             .padding(vertical = 14.dp)
                             .testTag("start_download_button"),
@@ -769,7 +793,7 @@ fun DownloadInputTab(
                             Icon(
                                 imageVector = if (isQueueDestination) Icons.Default.Layers else Icons.Default.Download,
                                 contentDescription = null,
-                                tint = if (isValid) Color.White else MaterialTheme.colorScheme.outline,
+                                tint = buttonFgColor,
                                 modifier = Modifier.size(18.dp)
                             )
                             Spacer(modifier = Modifier.width(8.dp))
@@ -778,7 +802,7 @@ fun DownloadInputTab(
                                 fontFamily = DmSansFontFamily,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 15.sp,
-                                color = if (isValid) Color.White else MaterialTheme.colorScheme.outline
+                                color = buttonFgColor
                             )
                         }
                     }
@@ -2489,34 +2513,50 @@ fun SettingOptionSelectorRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(text = title, fontFamily = DmSansFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-                Text(text = currentValue, fontFamily = DmSansFontFamily, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = ElectricCyan)
+                Text(
+                    text = title,
+                    fontFamily = DmSansFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = currentValue,
+                    fontFamily = DmSansFontFamily,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 12.sp,
+                    color = ElectricCyan
+                )
             }
-            Text(text = description, fontFamily = DmSansFontFamily, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = description,
+                fontFamily = DmSansFontFamily,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 for (opt in options) {
                     val isSel = opt == selectedOption
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .defaultMinSize(minHeight = 36.dp)
-                            .clip(RoundedCornerShape(10.dp))
+                            .defaultMinSize(minHeight = 48.dp)
+                            .clip(RoundedCornerShape(12.dp))
                             .background(if (isSel) ElectricBlue else MaterialTheme.colorScheme.surface)
                             .clickable { onOptionSelected(opt) },
                         contentAlignment = Alignment.Center
@@ -2525,7 +2565,7 @@ fun SettingOptionSelectorRow(
                             text = opt.toString(),
                             fontFamily = DmSansFontFamily,
                             fontWeight = if (isSel) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 13.sp,
+                            fontSize = 14.sp,
                             color = if (isSel) Color.White else MaterialTheme.colorScheme.onSurface
                         )
                     }
@@ -2547,42 +2587,51 @@ fun <T> SettingRadioGroupRow(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                Text(text = title, fontFamily = DmSansFontFamily, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Text(
+                    text = title,
+                    fontFamily = DmSansFontFamily,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
                 Text(
                     text = currentLabel,
                     fontFamily = DmSansFontFamily,
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
-                    color = ElectricCyan,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    color = ElectricCyan
                 )
             }
-            Text(text = description, fontFamily = DmSansFontFamily, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                text = description,
+                fontFamily = DmSansFontFamily,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
 
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 for (opt in options) {
                     val isSel = opt == selected
                     val label = labelProvider(opt)
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isSel) ElectricBlue.copy(alpha = 0.12f) else Color.Transparent)
+                            .defaultMinSize(minHeight = 48.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (isSel) ElectricBlue.copy(alpha = 0.15f) else Color.Transparent)
                             .clickable { onSelect(opt) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
@@ -2594,7 +2643,7 @@ fun <T> SettingRadioGroupRow(
                             color = if (isSel) ElectricCyan else MaterialTheme.colorScheme.onSurface
                         )
                         if (isSel) {
-                            Icon(Icons.Default.Check, contentDescription = null, tint = ElectricCyan, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Check, contentDescription = null, tint = ElectricCyan, modifier = Modifier.size(18.dp))
                         }
                     }
                 }

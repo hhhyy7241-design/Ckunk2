@@ -23,98 +23,145 @@ val DmSansFontFamily = FontFamily(
     Font(R.font.dm_sans, FontWeight.Bold)
 )
 
+// Tipografía con números tabulares para evitar Layout Shift
+val TabularBricolage = TextStyle(
+    fontFamily = BricolageGrotesqueFontFamily,
+    fontFeatureSettings = "tnum"
+)
+
+val TabularDmSans = TextStyle(
+    fontFamily = DmSansFontFamily,
+    fontFeatureSettings = "tnum"
+)
+
+val TabularSpeedBadge = TextStyle(
+    fontFamily = DmSansFontFamily,
+    fontWeight = FontWeight.SemiBold,
+    fontSize = 12.sp,
+    fontFeatureSettings = "tnum"
+)
+
+val TabularPercentBig = TextStyle(
+    fontFamily = BricolageGrotesqueFontFamily,
+    fontWeight = FontWeight.SemiBold,
+    fontSize = 28.sp,
+    lineHeight = 32.sp,
+    fontFeatureSettings = "tnum"
+)
+
+val TabularPercentSign = TextStyle(
+    fontFamily = BricolageGrotesqueFontFamily,
+    fontWeight = FontWeight.SemiBold,
+    fontSize = 16.sp,
+    fontFeatureSettings = "tnum"
+)
+
+val TabularEta = TextStyle(
+    fontFamily = DmSansFontFamily,
+    fontWeight = FontWeight.Normal,
+    fontSize = 12.sp,
+    fontFeatureSettings = "tnum"
+)
+
+val TabularParts = TextStyle(
+    fontFamily = DmSansFontFamily,
+    fontWeight = FontWeight.SemiBold,
+    fontSize = 13.sp,
+    fontFeatureSettings = "tnum"
+)
+
+val TabularBytes = TextStyle(
+    fontFamily = DmSansFontFamily,
+    fontWeight = FontWeight.Normal,
+    fontSize = 12.sp,
+    fontFeatureSettings = "tnum"
+)
+
+/**
+ * Escala tipográfica estricta:
+ * Máximo 4 tamaños principales de texto (12sp, 14sp, 16sp, 24sp)
+ * y 2 pesos estándar (Normal y SemiBold), con soporte tabular para cifras numéricas.
+ */
 val Typography = Typography(
-    displayLarge = TextStyle(
-        fontFamily = BricolageGrotesqueFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 40.sp,
-        lineHeight = 46.sp,
-        letterSpacing = (-0.5).sp
-    ),
-    displayMedium = TextStyle(
-        fontFamily = BricolageGrotesqueFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 32.sp,
-        lineHeight = 38.sp,
-        letterSpacing = (-0.5).sp
-    ),
+    // 24sp
     headlineLarge = TextStyle(
         fontFamily = BricolageGrotesqueFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 28.sp,
-        lineHeight = 34.sp,
-        letterSpacing = (-0.25).sp
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 24.sp,
+        lineHeight = 30.sp,
+        fontFeatureSettings = "tnum"
     ),
     headlineMedium = TextStyle(
         fontFamily = BricolageGrotesqueFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 24.sp,
-        lineHeight = 30.sp
+        lineHeight = 30.sp,
+        fontFeatureSettings = "tnum"
     ),
     headlineSmall = TextStyle(
         fontFamily = BricolageGrotesqueFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp,
-        lineHeight = 26.sp
+        fontSize = 24.sp,
+        lineHeight = 30.sp
     ),
+    // 16sp
     titleLarge = TextStyle(
         fontFamily = BricolageGrotesqueFontFamily,
-        fontWeight = FontWeight.Bold,
-        fontSize = 22.sp,
-        lineHeight = 28.sp
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 16.sp,
+        lineHeight = 22.sp
     ),
     titleMedium = TextStyle(
         fontFamily = BricolageGrotesqueFontFamily,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 17.sp,
-        lineHeight = 23.sp
-    ),
-    titleSmall = TextStyle(
-        fontFamily = BricolageGrotesqueFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 14.sp,
-        lineHeight = 20.sp
+        fontSize = 16.sp,
+        lineHeight = 22.sp
     ),
     bodyLarge = TextStyle(
         fontFamily = DmSansFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
-        lineHeight = 24.sp,
-        letterSpacing = 0.15.sp
+        lineHeight = 24.sp
+    ),
+    // 14sp
+    titleSmall = TextStyle(
+        fontFamily = DmSansFontFamily,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 14.sp,
+        lineHeight = 20.sp
     ),
     bodyMedium = TextStyle(
         fontFamily = DmSansFontFamily,
         fontWeight = FontWeight.Normal,
         fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.25.sp
-    ),
-    bodySmall = TextStyle(
-        fontFamily = DmSansFontFamily,
-        fontWeight = FontWeight.Normal,
-        fontSize = 12.sp,
-        lineHeight = 16.sp,
-        letterSpacing = 0.4.sp
+        lineHeight = 20.sp
     ),
     labelLarge = TextStyle(
         fontFamily = DmSansFontFamily,
         fontWeight = FontWeight.SemiBold,
         fontSize = 14.sp,
-        lineHeight = 20.sp,
-        letterSpacing = 0.1.sp
+        lineHeight = 20.sp
+    ),
+    // 12sp
+    bodySmall = TextStyle(
+        fontFamily = DmSansFontFamily,
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        fontFeatureSettings = "tnum"
     ),
     labelMedium = TextStyle(
         fontFamily = DmSansFontFamily,
-        fontWeight = FontWeight.Medium,
+        fontWeight = FontWeight.SemiBold,
         fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.5.sp
+        fontFeatureSettings = "tnum"
     ),
     labelSmall = TextStyle(
         fontFamily = DmSansFontFamily,
-        fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
-        lineHeight = 14.sp,
-        letterSpacing = 0.5.sp
+        fontWeight = FontWeight.Normal,
+        fontSize = 12.sp,
+        lineHeight = 16.sp,
+        fontFeatureSettings = "tnum"
     )
 )
